@@ -95,9 +95,9 @@ int idMemoria = -1;
 	_exit(0); // mejor para trabajar con señales
 }
 
-/* ---------------------------- */
-	void limpiarRecursos() 
-/* ---------------------------- */
+/* -------------------------------- */
+	void limpiarRecursos(){ 
+/* -------------------------------- */
 	int i;
 	struct shmid_ds shmid;
 
