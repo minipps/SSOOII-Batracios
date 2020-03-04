@@ -14,6 +14,7 @@
 #define MAX_VELOCIDAD 1000
 #define MIN_TMEDIO 0
 
+
 /* ----------- PROTOTIPOS -------------- */
 	void sigintHandler(int sig);
 	void limpiarRecursos(void);
@@ -79,9 +80,6 @@ int idMemoria;
 	return 0;
 }
 
-// PASO 4.
-
-
 /* ----------------------------------- */
 	void sigintHandler(int sig){
 /* ----------------------------------- */
@@ -94,7 +92,7 @@ int idMemoria;
 /* ---------------------------- */
 	int i;
 	struct shmid_ds shmid;
-
+    
 	if(semaforo > 0){
 		if(semctl(semaforo, 0, IPC_RMID) < 0){
 			perror("limpiarRecursos: semctl");
