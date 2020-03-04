@@ -8,10 +8,10 @@ CTAGS = -c -g -DDEBUG
 all : batracios
 
 batracios : $(OBJS) libbatracios.a
-	$(CC) -lm -o batracios $(OBJS) -L libbatracios.a
+	$(CC) -m32 $(OBJS) libbatracios.a -o batracios -lm
 
 batracios.o : batracios.c
-	$(CC) $(CTAGS) batracios.c
+	$(CC) -m32 $(CTAGS) batracios.c
 
 clean:
 	rm $(OBJS) batracios
