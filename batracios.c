@@ -20,6 +20,7 @@
 	void sigintHandler(int sig);
 	void limpiarRecursos(void);
 	int bucleRanasMadre(int i);
+	int bucleRanasHijo(int * dx, int * dy);
 /* ------------------------------------- */
 
 //SEMÁFOROS
@@ -145,9 +146,28 @@ int idMemoria = -1;
 }
 
 int bucleRanasMadre(int i) {
-	int dx, dy;
+	int retorno, dx, dy;
 	while(1) {
 		BATR_descansar_criar();
 		BATR_parto_ranas(i, &dx, &dy);
+		retorno = fork();
+		switch(retorno) {
+			case 0:
+				break;
+			default:
+				bucleRanasHijo(&dx, &dy);
+				break;
+		}
+	}
+}
+
+int bucleRanasHijo(int * dx, int * dy) {
+	while(1) {
+		if (!(BATR_puedo_saltar(*dx, *dy, ARRIBA))) {
+			BATR_avance_rana_ini(*dx, *dy);
+			BATR_avance_rana(dx, dy, ARRIBA);
+			BATR_pausa();
+			BATR_avance_rana_fin(*dx, *dy);
+		}
 	}
 }
