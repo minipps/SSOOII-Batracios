@@ -15,13 +15,14 @@
 #define MIN_TMEDIO (const int)0
 #define MOVIMIENTO_TRONCOS (const int)0
 
-
-/* ----------- PROTOTIPOS -------------- */
+/* -------------- PROTOTIPOS ----------------- */
 	void sigintHandler(int sig);
 	void limpiarRecursos(void);
 	int bucleRanasMadre(int i);
-	int bucleRanasHijo(int * dx, int * dy);
-/* ------------------------------------- */
+	int bucleRanasHija(int *dx, int *dy);
+	int waitSobreSemaforo(int semaforo, int indice, int nsops);
+	int signalSobreSemaforo(int semaforo, int indice, int nsops);
+/* ------------------------------------------- */
 
 //SEMÁFOROS
 int semaforo = -1; // Iniciamos los IDs de los recursos IPC a -1, como se recomienda, para gestionar errores mejor
@@ -36,9 +37,8 @@ int idMemoria = -1;
 	struct sembuf sops[MAX_SEMAFOROS];
 	struct sigaction sigint, viejoSigint;
 	sigint.sa_handler = sigintHandler;
-	int arg1, arg2;
-	int i, retornoFork = 0;
-	int vectorTroncos[7] = {3,4,5,6,7,8,9};
+	int arg1, arg2, i, retornoFork = 0;
+	int vectorTroncos[7] = {6,7,8,9,10,11,12};
     int vectorAgua[7] = {7, 6, 5, 4, 3, 2, 1};
 	int vectorDirs[7] = {DERECHA, IZQUIERDA, DERECHA, IZQUIERDA, DERECHA, IZQUIERDA, DERECHA};
 	char * memoriaCompartida = NULL;
@@ -62,6 +62,11 @@ int idMemoria = -1;
 // PASO 1. CREAR SEMÁFORO Y MEMORIA COMPARTIDA
 	// SEMÁFORO
 	semaforo = semget(IPC_PRIVATE, MAX_SEMAFOROS, IPC_CREAT | 0600);
+	//SEMAFORO
+	if (semctl(semaforo, 1, SETVAL, 25) < 0) {
+		perror("main: semctl");
+		return 9;
+	}
 	if (semaforo < 0) {
 		perror("main: semget");
 		return 8;
@@ -77,41 +82,46 @@ int idMemoria = -1;
 		perror("main: shmat");
 		return 9;
 	}
-	/* 
+	/*
 	/ AQUÍ VA EL POSIBLE BUZÓN
 	*/
-
-// PASO 2. CAPTAR CTRL+C Y ELIMINAR IPCS
+	// PASO 2. CAPTAR CTRL+C Y ELIMINAR IPCS
 	if(sigaction(SIGINT,&sigint,&viejoSigint)==-1) return 2;
-		
+
 // PASO 4. Llamar a BATR_inicio y BATR_fin
 	BATR_inicio(arg1, semaforo, vectorTroncos, vectorAgua, vectorDirs, arg2, memoriaCompartida);
-	// PASO 7. Crear procesos de las ranas madre
-	for (i = 0; i < 3; i++) {
-		switch(retornoFork) {
+	// PASO 7. CREAR PROCESOS MADRE
+	for(int i=0; i<4; i++){
+		if (i == 0) {
+			if((retornoFork = fork()) < 0){
+				perror("main: creacion de ranas madre: fork");
+				return 10;
+			}
+		}
+		switch(retornoFork){
 			case 0:
-				retornoFork = fork();
-				if (retornoFork < 0) {
-					perror("main, creación ranas madre: fork");
+				if((retornoFork = fork()) < 0){
+					perror("main: creacion de ranas madre: fork");
 					return 10;
 				}
 				break;
 			default:
-				if(sigaction(SIGINT, &viejoSigint, NULL)==-1) return 11;
+				// PASO 2. CAPTAR CTRL+C Y ELIMINAR IPCS
+				if(sigaction(SIGINT,&viejoSigint, NULL)==-1) return 11;
 				bucleRanasMadre(i);
 				break;
 		}
- 	}
-	// PASO 5/6. Mover troncos
-	if (MOVIMIENTO_TRONCOS) {
-		while(1) {
-			for(i = 0; i < 7; i++) {
+	}
+	// PASO 5. MOVER TRONCOS
+	if(MOVIMIENTO_TRONCOS){
+		while(1){
+			for(i=0; i<7; i++){
 				BATR_avance_troncos(i);
 				BATR_pausita();
 			}
 		}
 	}
-	while(1);
+	while(1); // para que el padre no llame a BATR_fin antes de acabar el programa
 	BATR_fin();
 	limpiarRecursos();
 	return 0;
@@ -122,13 +132,14 @@ int idMemoria = -1;
 /* ----------------------------------- */
 	void sigintHandler(int sig) {
 /* ----------------------------------- */
+	BATR_comprobar_estadIsticas();
 	limpiarRecursos();
 	_exit(0); // mejor para trabajar con señales
 }
 
-/* -------------------------------- */
-	void limpiarRecursos(){ 
-/* -------------------------------- */
+/* ---------------------------- */
+	void limpiarRecursos(){
+/* ---------------------------- */
 	int i;
 	struct shmid_ds shmid;
 
@@ -145,29 +156,52 @@ int idMemoria = -1;
 	}
 }
 
-int bucleRanasMadre(int i) {
+/* ------------------------------ */
+	int bucleRanasMadre(int i){
+/* ------------------------------ */
 	int retorno, dx, dy;
-	while(1) {
+
+	while(1){
+		waitSobreSemaforo(semaforo, 1, 1);
 		BATR_descansar_criar();
 		BATR_parto_ranas(i, &dx, &dy);
 		retorno = fork();
-		switch(retorno) {
+		switch(retorno){
 			case 0:
 				break;
 			default:
-				bucleRanasHijo(&dx, &dy);
+				bucleRanasHija(&dx,&dy); // falta guardar el valor que devuelve
 				break;
 		}
 	}
 }
 
-int bucleRanasHijo(int * dx, int * dy) {
-	while(1) {
-		if (!(BATR_puedo_saltar(*dx, *dy, ARRIBA))) {
+/* ------------------------------------------ */
+	int bucleRanasHija(int *dx, int *dy){
+/* ------------------------------------------ */
+	const int DIRECCIONES[] = {ARRIBA, IZQUIERDA, DERECHA};
+	while(1){
+		int rnd = rand() % 3;
+		if(!BATR_puedo_saltar(*dx,*dy, DIRECCIONES[rnd])){
 			BATR_avance_rana_ini(*dx, *dy);
-			BATR_avance_rana(dx, dy, ARRIBA);
+			BATR_avance_rana(dx, dy, DIRECCIONES[rnd]);
 			BATR_pausa();
 			BATR_avance_rana_fin(*dx, *dy);
+			if (*dy == 11) { //Rana salvada
+				signalSobreSemaforo(semaforo, 1, 1);
+				raise(SIGTERM);
+			}
 		}
 	}
+}
+
+int waitSobreSemaforo(int semaforo, int indice, int nsops) {
+	//Campos de sembuf: num semaforo, operacion, flags.
+	struct sembuf sopWait = {indice, -1, 0};
+	return semop(semaforo, &sopWait, nsops);
+}
+
+int signalSobreSemaforo(int semaforo, int indice, int nsops) {
+	struct sembuf sopSignal = {indice, 1, 0};
+	return semop(semaforo, &sopSignal, nsops);
 }
