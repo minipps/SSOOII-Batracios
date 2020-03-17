@@ -16,6 +16,6 @@ jobs:
     - name: setup
       run: sudo dpkg --add-architecture i386
     - name: dependencias
-      run: sudo apt-get install g++-multilib
+      run: sudo apt-get -y install g++-multilib
     - name: make
       run: make
