@@ -8,7 +8,7 @@
 #include <sys/shm.h> // memoria compartida
 #include <sys/types.h>
 #include <unistd.h>
-
+#include <sys/wait.h>
 #define MAX_PROCESOS (const int)25
 #define MIN_VELOCIDAD (const int)0
 #define MAX_VELOCIDAD (const int)1000
@@ -34,7 +34,7 @@
 	int bucleRanasMadre(int i);
 	int bucleRanasHija(int *dx, int *dy, int i);
 	int operarSobreSemaforo(int semaforo, int indice, int op, int nsops);
-	void devolverPunterosContadores(int * ranasNacidas, int * ranasSalvadas, int * ranasPerdidas);
+	void devolverPunterosContadores(int ** ranasNacidas, int ** ranasSalvadas, int ** ranasPerdidas);
 /* ------------------------------------------- */
 
 //SEMÁFOROS
@@ -43,6 +43,7 @@ int semaforo = -1; // Iniciamos los IDs de los recursos IPC a -1, como se recomi
 // MEMORIA COMPARTIDA
 int idMemoria = -1;
 int * memoriaCompartida = NULL;
+pid_t arrayPID[25] = {-1};
 
 /* ------------------------------------ */
 	int main(int argc, char * argv[]) {
@@ -128,9 +129,7 @@ int * memoriaCompartida = NULL;
 		perror("main: shmat");
 		return 9;
 	}
-	ranasNacidas = memoriaCompartida + 2048;
-	ranasSalvadas = ranasNacidas + sizeof(int);
-	ranasMuertas = ranasSalvadas + sizeof(int);
+	devolverPunterosContadores(&ranasNacidas, &ranasSalvadas, &ranasMuertas);
 	*ranasNacidas = 0;
 	*ranasSalvadas = 0;
 	*ranasMuertas = 0;
@@ -145,25 +144,19 @@ int * memoriaCompartida = NULL;
 	BATR_inicio(arg1, semaforo, vectorTroncos, vectorAgua, vectorDirs, arg2, (char *)memoriaCompartida);
 	// PASO 7. CREAR PROCESOS MADRE
 	for(int i=0; i<NUM_RANAS_MADRE; i++){
-		if (i == 0) {
-			if((retornoFork = fork()) < 0){
-				perror("main: creacion de ranas madre: fork");
-				return 10;
-			}
-		}
+		retornoFork = fork();
 		switch(retornoFork){
 			case 0:
-				if((retornoFork = fork()) < 0){
-					perror("main: creacion de ranas madre: fork");
-					return 10;
-				}
-				break;
-			default:
-				// PASO 2. CAPTAR CTRL+C Y ELIMINAR IPCS
 				if(sigaction(SIGINT,&sigintHijos, NULL)==-1) return 11;
 				if(sigaction(SIGCLD,&viejoSigcld, NULL)==-1) return 16;
 				operarSobreSemaforo(semaforo, SEMAFORO_PROCESOS, WAIT, 1);
 				bucleRanasMadre(i);
+				break;
+			default:
+				if (retornoFork < 0) {
+					perror("main: creación ranas madre");
+				}
+				arrayPID[i] = retornoFork;
 				break;
 		}
 	}
@@ -186,15 +179,26 @@ int * memoriaCompartida = NULL;
 	void sigintHandlerPadre(int sig) {
 /* ----------------------------------- */
 	sigset_t mascara;
+	int i;
+	for (i = 0; i < MAX_PROCESOS; i++) {
+		if (arrayPID[i] > 0) {
+			kill(arrayPID[i], SIGINT);
+		}
+	}
+	for (i = 0; i < MAX_PROCESOS; i++) {
+		if (arrayPID[i] > 0) {
+			waitpid(arrayPID[i], NULL, 0);
+		}
+	}
 	sigfillset(&mascara);
-	sigprocmask(SIG_SETMASK, &mascara, NULL);
-	BATR_fin();
 	int * ranasNacidas, * ranasSalvadas, * ranasMuertas;
-	devolverPunterosContadores(ranasNacidas, ranasSalvadas, ranasMuertas);
+	//TODO: Comprobar si es mejor bloquear o no bloquear señales en esta parte.
+	//sigprocmask(SIG_SETMASK, &mascara, NULL);
+	BATR_fin();
+	devolverPunterosContadores(&ranasNacidas, &ranasSalvadas, &ranasMuertas);
 	BATR_comprobar_estadIsticas(*ranasNacidas, *ranasSalvadas, *ranasMuertas);
-	operarSobreSemaforo(semaforo, SEMAFORO_PROCESOS, WAIT_ALL, 1);
 	limpiarRecursos();
-	sigprocmask(SIG_UNBLOCK, &mascara, NULL);
+	//sigprocmask(SIG_UNBLOCK, &mascara, NULL);
 	_exit(0); // mejor para trabajar con señales
 }
 
@@ -203,7 +207,6 @@ int * memoriaCompartida = NULL;
 /* ---------------------------- */
 	int i;
 	struct shmid_ds shmid;
-
 	if(semaforo > 0){
 		if(semctl(semaforo, 0, IPC_RMID) < 0){
 			perror("limpiarRecursos: semctl");
@@ -227,7 +230,8 @@ int * memoriaCompartida = NULL;
 	int * ranasNacidas;
 	sigset_t mascara;
 	sigfillset(&mascara);
-	devolverPunterosContadores(ranasNacidas, NULL, NULL);
+	devolverPunterosContadores(&ranasNacidas, NULL, NULL);
+	int j = 0;
 	while(1){
 		operarSobreSemaforo(semaforo, SEMAFORO_PROCESOS, WAIT, 1);
 		operarSobreSemaforo(semaforo, SEMAFORO_PRIMERMOVIMIENTO+i, WAIT, 1);
@@ -240,14 +244,16 @@ int * memoriaCompartida = NULL;
 		}
 		switch(retorno){
 			case 0:
+				bucleRanasHija(&dx,&dy, i); // falta guardar el valor que devuelve
+				break;
+			default:
+				arrayPID[j] = retorno;
+				j++;
 				sigprocmask(SIG_SETMASK, &mascara, NULL);
 				operarSobreSemaforo(semaforo, SEMAFORO_NACIDAS, WAIT, 1);
 				*ranasNacidas += 1;
 				operarSobreSemaforo(semaforo, SEMAFORO_NACIDAS, SIGNAL, 1);
 				sigprocmask(SIG_UNBLOCK, &mascara, NULL);
-				break;
-			default:
-				bucleRanasHija(&dx,&dy, i); // falta guardar el valor que devuelve
 				break;
 		}
 	}
@@ -260,7 +266,7 @@ int * memoriaCompartida = NULL;
 	int contadorBloqueo = 0;
 	sigset_t mascara;
 	sigfillset(&mascara);
-	devolverPunterosContadores(NULL, ranasSalvadas, ranasPerdidas);
+	devolverPunterosContadores(NULL, &ranasSalvadas, &ranasPerdidas);
 	const int DIRECCIONES[] = {IZQUIERDA, DERECHA};
 	while(1){
 		if (contadorBloqueo > MAX_TICS_ANTES_DE_MUERTE) { // si pasan MAX_TICS_ANTES_DE_MUERTE tics y una rana está no ha avanzado fila, explota
@@ -317,9 +323,15 @@ int operarSobreSemaforo(int semaforo, int indice, int op, int nsops) {
 /* ------------------------------------- */
 void sigintHandlerHijos(int sig) {
 /* ------------------------------------- */
-sigset_t mascara;
-sigfillset(&mascara);
-sigprocmask(SIG_SETMASK, &mascara, NULL);
+	sigset_t mascara;
+	int i;
+	sigfillset(&mascara);
+	sigprocmask(SIG_SETMASK, &mascara, NULL);
+	for (i = 0; i < MAX_PROCESOS; i++) {
+		if (arrayPID[i] > 0) {
+			kill(arrayPID[i], SIGINT);
+		}
+	}
 	if (operarSobreSemaforo(semaforo, SEMAFORO_PROCESOS, SIGNAL, 1) < 0) {
 		perror("sigintHandlerHijos: operacion");
 		_exit(20);
@@ -328,8 +340,17 @@ sigprocmask(SIG_SETMASK, &mascara, NULL);
 	_exit(0);
 }
 
-void devolverPunterosContadores(int * ranasNacidas, int * ranasSalvadas, int * ranasPerdidas) {
-	ranasNacidas = memoriaCompartida + 2048;
-	ranasSalvadas = ranasNacidas + sizeof(int);
-	ranasPerdidas = ranasSalvadas + sizeof(int);
+void devolverPunterosContadores(int ** ranasNacidas, int ** ranasSalvadas, int ** ranasPerdidas) {
+	if (memoriaCompartida != NULL) {
+		if (ranasNacidas != NULL) {
+			*ranasNacidas = &(memoriaCompartida[513]);
+		}
+		if (ranasSalvadas != NULL) {
+			*ranasSalvadas = &(memoriaCompartida[514]);
+		}
+		if (ranasPerdidas != NULL) {
+			*ranasPerdidas = &(memoriaCompartida[515]);
+		}
+	}
+
 }
