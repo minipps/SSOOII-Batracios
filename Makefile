@@ -10,6 +10,9 @@ all : batracios
 batracios : $(OBJS) libbatracios.a
 	$(CC) -m32 $(OBJS) libbatracios.a -o batracios -lm
 
+batracios_solaris : $(OBJS) libbatracios_solaris.a
+	$(CC) -m32 $(OBJS) libbatracios_solaris.a -o batracios -lm
+
 batracios.o : batracios.c
 	$(CC) -m32 $(CTAGS) batracios.c
 

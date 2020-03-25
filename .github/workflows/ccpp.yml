@@ -1,0 +1,23 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ master, development ]
+  pull_request:
+    branches: [ master, development ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    - name: setup
+      run: sudo dpkg --add-architecture i386
+    - name: fix_missing
+      run: sudo apt-get update --fix-missing
+    - name: dependencias
+      run: sudo apt-get -y install g++-multilib
+    - name: make
+      run: make
