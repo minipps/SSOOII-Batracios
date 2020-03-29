@@ -42,6 +42,7 @@ union semun{
 void sigintHandlerPadre(int sig);
 void sigintHandlerMadres(int sig);
 void sigintHandlerRenacuajos(int sig);
+void sigcldHandlerMadres(int sig);
 void reservarIPC(void);
 int limpiarRecursos(void);
 int bucleRanasMadre(int i);
@@ -55,7 +56,7 @@ void inicializarVectorPosiciones(int** vecPos);
 int semaforo = -1; // Iniciamos los IDs de los recursos IPC a -1, como se recomienda, para gestionar errores mejor
 int idMemoria = -1;
 int* memoriaCompartida = NULL;
-pid_t arrayPID[25] = {-1};
+pid_t arrayPID[50] = {-1};
 
 
 /* ------------------------------------ */
@@ -122,17 +123,21 @@ int main(int argc,char* argv[]) {
 		// PASO 5. MOVER TRONCOS
 		while(1) {
 				if(MOVIMIENTO_TRONCOS) {
-						for(i = 0; i < NUM_TRONCOS; i++) {
+						for(i = NUM_TRONCOS - 1; i > 0; i--) {
+								operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,WAIT,1,0);
 								BATR_avance_troncos(i);
 								for(j = 1; j < MAX_PROCESOS * 2; j = j + 2) {
-										if (vecPos[j] == j + FILA_PRIMER_TRONCO) {
-												if (vectorTroncos[7 - i] == DERECHA) { //El vector empieza por la fila de arriba, nosotros por la de abajo
-														vecPos[j - 1] -= 1;
-												} else {
+										if (vecPos[j] == i + FILA_PRIMER_TRONCO) {
+												if (vectorTroncos[7 - i] == DERECHA) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    //El vector empieza por la fila de arriba, nosotros por la de abajo
 														vecPos[j - 1] += 1;
+														fprintf(stderr,"Movida rana de %d, %d a %d, %d\n",vecPos[j - 1] - 1,vecPos[j],vecPos[j - 1],vecPos[j]);
+												} else {
+														vecPos[j - 1] -= 1;
+														fprintf(stderr,"Movida rana de %d, %d a %d, %d\n",vecPos[j - 1] + 1,vecPos[j],vecPos[j - 1],vecPos[j]);
 												}
 										}
 								}
+								operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,SIGNAL,1,0);
 								BATR_pausita();
 						}
 				}
@@ -157,15 +162,15 @@ void sigintHandlerPadre(int sig) {
 						waitpid(arrayPID[i],NULL,0);
 				}
 		}
-		if ((operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,WAIT,1,IPC_NOWAIT | SEM_UNDO) == -1)) { //Si el semáforo de la biblioteca queda bloqueado
-				operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,SIGNAL,1,0); //hacemos un signal para que el programa no se quede pillado.
+		if ((operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,WAIT,1,IPC_NOWAIT | SEM_UNDO) == -1)) {                                                                                                                                                                                                                                                                                                                         //Si el semáforo de la biblioteca queda bloqueado
+				operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,SIGNAL,1,0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //hacemos un signal para que el programa no se quede pillado.
 		}
 		devolverPunterosContadores(&ranasNacidas,&ranasSalvadas,&ranasMuertas);
 		//BATR_comprobar_estadIsticas(*ranasNacidas, *ranasSalvadas, *ranasMuertas);
 		BATR_fin();
 		ret = limpiarRecursos();
 		if (ret >= 0) {
-				exit(0); // mejor para trabajar con señales
+				exit(0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // mejor para trabajar con señales
 		} else {
 				exit(ret);
 		}
@@ -226,7 +231,7 @@ void reservarIPC(){
 				perror("main: shmget");
 				exit(1);
 		}
-		memoriaCompartida = shmat(idMemoria,0,0); // el sistema decide dónde guardar la memoria compartida // no queremos flags especiales
+		memoriaCompartida = shmat(idMemoria,0,0);                                                                                                                                                                                                                                                                                                                         // el sistema decide dónde guardar la memoria compartida // no queremos flags especiales
 		if (memoriaCompartida == NULL) {
 				perror("main: shmat");
 				exit(9);
@@ -262,9 +267,14 @@ int bucleRanasMadre(int i){
 		int retorno,posX,posY;
 		int* ranasNacidas;
 		sigset_t mascara;
-		struct sigaction sigintRenacuajos;
+		struct sigaction sigintRenacuajos,sigcldMadres;
 		sigintRenacuajos.sa_handler = sigintHandlerRenacuajos;
 		sigintRenacuajos.sa_flags = 0;
+		sigcldMadres.sa_handler = SIG_IGN;
+		sigcldMadres.sa_flags = 0;
+		if (sigaction(SIGCLD,&sigcldMadres,NULL) == -1) {
+				perror("sigaction madres");
+		}
 		sigfillset(&mascara);
 		devolverPunterosContadores(&ranasNacidas,NULL,NULL);
 		int j = 0;
@@ -281,7 +291,7 @@ int bucleRanasMadre(int i){
 				switch(retorno) {
 				case 0:
 						if(sigaction(SIGINT,&sigintRenacuajos,NULL) == -1) return 11;
-						bucleRanasHija(&posX,&posY,i); // falta guardar el valor que devuelve
+						bucleRanasHija(&posX,&posY,i);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         // falta guardar el valor que devuelve
 						break;
 				default:
 						arrayPID[j] = retorno;
@@ -310,7 +320,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 		*posY = *dy;
 		const int DIRECCIONES[] = {IZQUIERDA,DERECHA};
 		while(1) {
-				if ((contadorBloqueo > MAX_TICS_ANTES_DE_MUERTE) && !MOVIMIENTO_TRONCOS) { // si pasan MAX_TICS_ANTES_DE_MUERTE tics y una rana está no ha avanzado fila, explota
+				if ((contadorBloqueo > MAX_TICS_ANTES_DE_MUERTE) && !MOVIMIENTO_TRONCOS) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // si pasan MAX_TICS_ANTES_DE_MUERTE tics y una rana está no ha avanzado fila, explota
 						BATR_explotar(*posX,*posY);
 						sigprocmask(SIG_SETMASK,&mascara,NULL);
 						operarSobreSemaforo(semaforo,SEMAFORO_PERDIDAS,WAIT,  1,0);
@@ -324,6 +334,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 				int estaEnPrimeraCasilla = (*posY == 1) ? 1 : 0;
 				int rnd = rand() % 2;
 				operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,WAIT,1,0);
+				fprintf(stderr,"%d: X %d | Y %d\n",getpid(),*posX,*posY);
 				if(!BATR_puedo_saltar(*posX,*posY,ARRIBA)) {
 						BATR_avance_rana_ini(*posX,*posY);
 						BATR_avance_rana(posX,posY,ARRIBA);
@@ -357,13 +368,13 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						contadorBloqueo++;
 						BATR_pausita();
 				}
-				if (*posY == 11) { //Rana salvada
+				if (*posY > FILA_ULTIMO_TRONCO) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //Rana salvada
 						operarSobreSemaforo(semaforo,SEMAFORO_SALVADAS,WAIT,  1,0);
 						*ranasSalvadas += 1;
 						operarSobreSemaforo(semaforo,SEMAFORO_SALVADAS,SIGNAL,1,0);
 						*posX = -1;
 						*posY = -1;
-						raise(SIGINT); // aquí hace el signal ya
+						raise(SIGINT);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         // aquí hace el signal ya
 				}
 		}
 }
@@ -424,7 +435,10 @@ void devolverPunterosContadores(int** ranasNacidas,int** ranasSalvadas,int** ran
 				}
 		}
 }
+
+/* --------------------------------------------------- */
 void inicializarVectorPosiciones(int** vecPos) {
+/* --------------------------------------------------- */
 		int* posiciones = NULL;
 		int i;
 		if (memoriaCompartida != NULL) {
@@ -451,4 +465,10 @@ void devolverPunteroAPosicion(int** posX,int** posY) {
 						}
 				}
 		}
+}
+
+void sigcldHandlerMadres(int sig) {
+		pid_t pid;
+		int status;
+		while((pid = waitpid(-1,&status,WNOHANG)) > 0);
 }
