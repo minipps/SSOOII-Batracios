@@ -51,6 +51,7 @@ int operarSobreSemaforo(int semaforo,int indice,short op,short nsops,short flg);
 void devolverPunterosContadores(int** ranasNacidas,int** ranasSalvadas,int** ranasPerdidas);
 void devolverPunteroAPosicion(int** posX,int** posY);
 void inicializarVectorPosiciones(int** vecPos);
+int declararSemaforo(int semaforo,int indice,int op,int val);
 /* ----------------------------------------------------------------------------------------------------- */
 
 int semaforo = -1; // Iniciamos los IDs de los recursos IPC a -1, como se recomienda, para gestionar errores mejor
@@ -103,7 +104,7 @@ int main(int argc,char* argv[]) {
 		// PASO 4. Llamar a BATR_inicio y BATR_fin
 		BATR_inicio(arg1,semaforo,vectorTroncos,vectorAgua,vectorDirs,arg2,(char*)memoriaCompartida);
 		// PASO 7. CREAR PROCESOS MADRE
-		for(int i = 0; i < NUM_RANAS_MADRE; i++) {
+		for(i = 0; i < NUM_RANAS_MADRE; i++) {
 				retornoFork = fork();
 				switch(retornoFork) {
 				case 0:
@@ -128,12 +129,12 @@ int main(int argc,char* argv[]) {
 								BATR_avance_troncos(i);
 								for(j = 1; j < MAX_PROCESOS * 2; j = j + 2) {
 										if (vecPos[j] == i + FILA_PRIMER_TRONCO) {
-												if (vectorTroncos[7 - i] == DERECHA) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    //El vector empieza por la fila de arriba, nosotros por la de abajo
+												if (vectorTroncos[7 - i] == DERECHA) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    //El vector empieza por la fila de arriba, nosotros por la de abajo
 														vecPos[j - 1] += 1;
-														fprintf(stderr,"Movida rana de %d, %d a %d, %d\n",vecPos[j - 1] - 1,vecPos[j],vecPos[j - 1],vecPos[j]);
+														//fprintf(stderr,"Movida rana de %d, %d a %d, %d\n",vecPos[j - 1] - 1,vecPos[j],vecPos[j - 1],vecPos[j]);
 												} else {
 														vecPos[j - 1] -= 1;
-														fprintf(stderr,"Movida rana de %d, %d a %d, %d\n",vecPos[j - 1] + 1,vecPos[j],vecPos[j - 1],vecPos[j]);
+														//fprintf(stderr,"Movida rana de %d, %d a %d, %d\n",vecPos[j - 1] + 1,vecPos[j],vecPos[j - 1],vecPos[j]);
 												}
 										}
 								}
@@ -162,15 +163,15 @@ void sigintHandlerPadre(int sig) {
 						waitpid(arrayPID[i],NULL,0);
 				}
 		}
-		if ((operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,WAIT,1,IPC_NOWAIT | SEM_UNDO) == -1)) {                                                                                                                                                                                                                                                                                                                         //Si el semáforo de la biblioteca queda bloqueado
-				operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,SIGNAL,1,0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //hacemos un signal para que el programa no se quede pillado.
+		if ((operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,WAIT,1,IPC_NOWAIT | SEM_UNDO) == -1)) {                                                                                                                                                                                                                                                                                                                                                                                                                                         //Si el semáforo de la biblioteca queda bloqueado
+				operarSobreSemaforo(semaforo,SEMAFORO_BIBLIOTECA,SIGNAL,1,0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //hacemos un signal para que el programa no se quede pillado.
 		}
 		devolverPunterosContadores(&ranasNacidas,&ranasSalvadas,&ranasMuertas);
 		//BATR_comprobar_estadIsticas(*ranasNacidas, *ranasSalvadas, *ranasMuertas);
 		BATR_fin();
 		ret = limpiarRecursos();
 		if (ret >= 0) {
-				exit(0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // mejor para trabajar con señales
+				exit(0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // mejor para trabajar con señales
 		} else {
 				exit(ret);
 		}
@@ -181,44 +182,44 @@ void reservarIPC(){
 		/* ---------------------- */
 		// PASO 1. CREAR SEMÁFORO Y MEMORIA COMPARTIDA
 		semaforo = semget(IPC_PRIVATE,MAX_PROCESOS,IPC_CREAT | 0600);
-		if (semctl(semaforo,SEMAFORO_PROCESOS,SETVAL,MAX_PROCESOS - 1) < 0) {
-				perror("main: semctl SEMAFORO_PROCESOS");
+		if (declararSemaforo(semaforo,SEMAFORO_PROCESOS,SETVAL,MAX_PROCESOS - 1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PROCESOS");
 				exit(9);
 		}
-		if (semctl(semaforo,SEMAFORO_PRIMERMOVIMIENTO,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PRIMERMOVIMIENTO");
+		if (declararSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PRIMERMOVIMIENTO");
 				exit(12);
 		}
-		if (semctl(semaforo,SEMAFORO_PRIMERMOVIMIENTO + 1,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PRIMERMOVIMIENTO");
+		if (declararSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO + 1,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PRIMERMOVIMIENTO");
 				exit(13);
 		}
-		if (semctl(semaforo,SEMAFORO_PRIMERMOVIMIENTO + 2,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PRIMERMOVIMIENTO");
+		if (declararSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO + 2,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PRIMERMOVIMIENTO");
 				exit(15);
 		}
-		if (semctl(semaforo,SEMAFORO_PRIMERMOVIMIENTO + 3,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PRIMERMOVIMIENTO");
+		if (declararSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO + 3,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PRIMERMOVIMIENTO");
 				exit(16);
 		}
-		if (semctl(semaforo,SEMAFORO_NACIDAS,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_NACIDAS");
+		if (declararSemaforo(semaforo,SEMAFORO_NACIDAS,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_NACIDAS");
 				exit(17);
 		}
-		if (semctl(semaforo,SEMAFORO_SALVADAS,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_SALVADAS");
+		if (declararSemaforo(semaforo,SEMAFORO_SALVADAS,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_SALVADAS");
 				exit(18);
 		}
-		if (semctl(semaforo,SEMAFORO_PERDIDAS,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PERDIDAS");
+		if (declararSemaforo(semaforo,SEMAFORO_PERDIDAS,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PERDIDAS");
 				exit(19);
 		}
-		if (semctl(semaforo,SEMAFORO_SALTO_RANAS,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PERDIDAS");
+		if (declararSemaforo(semaforo,SEMAFORO_SALTO_RANAS,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PERDIDAS");
 				exit(20);
 		}
-		if (semctl(semaforo,SEMAFORO_POSICIONES,SETVAL,1) < 0) {
-				perror("main: semctl SEMAFORO_PERDIDAS");
+		if (declararSemaforo(semaforo,SEMAFORO_POSICIONES,SETVAL,1) < 0) {
+				perror("main: declararSemaforo SEMAFORO_PERDIDAS");
 				exit(20);
 		}
 		if (semaforo < 0) {
@@ -231,7 +232,7 @@ void reservarIPC(){
 				perror("main: shmget");
 				exit(1);
 		}
-		memoriaCompartida = shmat(idMemoria,0,0);                                                                                                                                                                                                                                                                                                                         // el sistema decide dónde guardar la memoria compartida // no queremos flags especiales
+		memoriaCompartida = shmat(idMemoria,0,0);                                                                                                                                                                                                                                                                                                                                                                                                                                         // el sistema decide dónde guardar la memoria compartida // no queremos flags especiales
 		if (memoriaCompartida == NULL) {
 				perror("main: shmat");
 				exit(9);
@@ -245,11 +246,11 @@ int limpiarRecursos(){
 		sigprocmask(SIG_SETMASK,&mascara,NULL);
 		if(semaforo > 0) {
 				if(semctl(semaforo,0,IPC_RMID) < 0) {
-						perror("limpiarRecursos: semctl");
+						perror("limpiarRecursos: declararSemaforo");
 						return(-3);
 				}
 		}
-		if(shmdt(memoriaCompartida) < 0) {
+		if(shmdt((void*)memoriaCompartida) < 0) {
 				perror("limpiarRecursos: shmdt");
 				return(-16);
 		}
@@ -291,7 +292,7 @@ int bucleRanasMadre(int i){
 				switch(retorno) {
 				case 0:
 						if(sigaction(SIGINT,&sigintRenacuajos,NULL) == -1) return 11;
-						bucleRanasHija(&posX,&posY,i);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         // falta guardar el valor que devuelve
+						bucleRanasHija(&posX,&posY,i);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         // falta guardar el valor que devuelve
 						break;
 				default:
 						arrayPID[j] = retorno;
@@ -320,7 +321,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 		*posY = *dy;
 		const int DIRECCIONES[] = {IZQUIERDA,DERECHA};
 		while(1) {
-				if ((contadorBloqueo > MAX_TICS_ANTES_DE_MUERTE) && !MOVIMIENTO_TRONCOS) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // si pasan MAX_TICS_ANTES_DE_MUERTE tics y una rana está no ha avanzado fila, explota
+				if ((contadorBloqueo > MAX_TICS_ANTES_DE_MUERTE) && !MOVIMIENTO_TRONCOS) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // si pasan MAX_TICS_ANTES_DE_MUERTE tics y una rana está no ha avanzado fila, explota
 						BATR_explotar(*posX,*posY);
 						sigprocmask(SIG_SETMASK,&mascara,NULL);
 						operarSobreSemaforo(semaforo,SEMAFORO_PERDIDAS,WAIT,  1,0);
@@ -334,7 +335,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 				int estaEnPrimeraCasilla = (*posY == 1) ? 1 : 0;
 				int rnd = rand() % 2;
 				operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,WAIT,1,0);
-				fprintf(stderr,"%d: X %d | Y %d\n",getpid(),*posX,*posY);
+				//fprintf(stderr,"%d: X %d | Y %d\n",getpid(),*posX,*posY);
 				if(!BATR_puedo_saltar(*posX,*posY,ARRIBA)) {
 						BATR_avance_rana_ini(*posX,*posY);
 						BATR_avance_rana(posX,posY,ARRIBA);
@@ -368,13 +369,13 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						contadorBloqueo++;
 						BATR_pausita();
 				}
-				if (*posY > FILA_ULTIMO_TRONCO) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //Rana salvada
+				if (*posY > FILA_ULTIMO_TRONCO) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //Rana salvada
 						operarSobreSemaforo(semaforo,SEMAFORO_SALVADAS,WAIT,  1,0);
 						*ranasSalvadas += 1;
 						operarSobreSemaforo(semaforo,SEMAFORO_SALVADAS,SIGNAL,1,0);
 						*posX = -1;
 						*posY = -1;
-						raise(SIGINT);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         // aquí hace el signal ya
+						raise(SIGINT);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         // aquí hace el signal ya
 				}
 		}
 }
@@ -471,4 +472,10 @@ void sigcldHandlerMadres(int sig) {
 		pid_t pid;
 		int status;
 		while((pid = waitpid(-1,&status,WNOHANG)) > 0);
+}
+
+int declararSemaforo(int semaforo,int indice,int op,int val) {
+		union semun temp;
+		temp.val = val;
+		return semctl(semaforo,indice,op,temp.val);
 }
