@@ -50,3 +50,7 @@ Module.symvers
 Mkfile.old
 dkms.conf
 batracios
+perf.data
+.atom-beautify.batracios.c
+uncrustify.cfg
+salida
