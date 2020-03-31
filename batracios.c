@@ -133,14 +133,10 @@ int main(int argc,char* argv[]) {
 								BATR_avance_troncos(i);
 								for(j = 1; j < MAX_PROCESOS * 2; j = j + 2) {
 										if (vecPos[j] == (6 - i) + FILA_PRIMER_TRONCO) {
-												if (vectorDirs[6 - i] == DERECHA) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       //El vector empieza por la fila de arriba, nosotros por la de abajo
-														//fprintf(stderr,"Moviendo rana a la derecha, de %d, %d",vecPos[j - 1],vecPos[j]);
+												if (vectorDirs[6 - i] == DERECHA) { //La razón por la que usamos 6-i, es que el vector empieza por la fila de arriba y nosotros por la de abajo.
 														vecPos[j - 1] = vecPos[j - 1] + 1;
-														//fprintf(stderr," a %d %d\n",						   vecPos[j - 1],vecPos[j]);
 												} else {
-														//fprintf(stderr,"Moviendo rana a la izquierda, de %d, %d",vecPos[j - 1],vecPos[j]);
 														vecPos[j - 1] = vecPos[j - 1] - 1;
-														//fprintf(stderr," a %d %d\n",							 vecPos[j - 1],vecPos[j]);
 												}
 										}
 								}
@@ -159,7 +155,7 @@ void sigintHandlerPadre(int sig) {
 		/* ----------------------------------- */
 		int i,ret;
 		int* ranasNacidas,* ranasSalvadas,* ranasMuertas;
-		for (i = 0; i < MAX_PROCESOS; i++) {
+		for (i = 0; i < MAX_PROCESOS*2; i++) {
 				if (arrayPID[i] > 0) {
 						kill(arrayPID[i],SIGINT);
 				}
@@ -238,7 +234,7 @@ void reservarIPC(){
 				perror("reservarIPC: shmget");
 				exit(1);
 		}
-		memoriaCompartida = shmat(idMemoria,0,0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // el sistema decide dónde guardar la memoria compartida // no queremos flags especiales
+		memoriaCompartida  = shmat(idMemoria,0,0);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // el sistema decide dónde guardar la memoria compartida // no queremos flags especiales
 		if (memoriaCompartida == NULL) {
 				perror("reservarIPC: shmat");
 				exit(9);
@@ -329,6 +325,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 		devolverPunteroAPosicion(&posX,&posY);
 		*posX = *dx;
 		*posY = *dy;
+		int estaEnPrimeraCasilla = 1;
 		const int DIRECCIONES[] = {IZQUIERDA,DERECHA};
 		while(1) {
 				//Explotamos a las ranas si salen fuera del tablero o se quedan atascadas en la versión sin movimiento de troncos.
@@ -356,7 +353,6 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						*posY = -1;
 						raise(SIGINT);
 				}
-				int estaEnPrimeraCasilla = (*posY == 1) ? 1 : 0;
 				int rnd = rand() % 2;
 				//fprintf(stderr,"%d: X %d | Y %d (pre-salto)\n",getpid(),*posX,*posY);
 				if(!BATR_puedo_saltar(*posX,*posY,ARRIBA)) {
@@ -369,6 +365,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						contadorBloqueo = 0;
 						if (estaEnPrimeraCasilla) {
 								operarSobreSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO + i,SIGNAL,1,0);
+								estaEnPrimeraCasilla = 0;
 						}
 				} else if (!BATR_puedo_saltar(*posX,*posY,DIRECCIONES[rnd])) {
 						BATR_avance_rana_ini(*posX,*posY);
@@ -380,6 +377,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,SIGNAL,1,0);
 						if (estaEnPrimeraCasilla) {
 								operarSobreSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO + i,SIGNAL,1,0);
+								estaEnPrimeraCasilla = 0;
 						}
 				} else if (!BATR_puedo_saltar(*posX,*posY,DIRECCIONES[1 - rnd])) {
 						BATR_avance_rana_ini(*posX,*posY);
@@ -391,6 +389,7 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,SIGNAL,1,0);
 						if (estaEnPrimeraCasilla) {
 								operarSobreSemaforo(semaforo,SEMAFORO_PRIMERMOVIMIENTO + i,SIGNAL,1,0);
+								estaEnPrimeraCasilla = 0;
 						}
 				} else {
 						operarSobreSemaforo(semaforo,SEMAFORO_SALTO_RANAS,SIGNAL,1,0);
@@ -398,13 +397,16 @@ int bucleRanasHija(int*dx,int*dy,int i){
 						BATR_pausita();
 				}
 				if (*posY > FILA_ULTIMO_TRONCO) {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 //Rana salvada
+						sigprocmask(SIG_SETMASK,&mascara,NULL);
 						operarSobreSemaforo(semaforo,SEMAFORO_SALVADAS,WAIT,  1,0);
 						*ranasSalvadas += 1;
 						operarSobreSemaforo(semaforo,SEMAFORO_SALVADAS,SIGNAL,1,0);
 						*posX = -1;
 						*posY = -1;
-						raise(SIGINT);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // aquí hace el signal ya
+						sigprocmask(SIG_UNBLOCK,&mascara,NULL);
+						raise(SIGINT);                                                                                                                                                                                                                                                                                                                          // aquí hace el signal ya
 				}
+				BATR_pausita();
 		}
 }
 
@@ -422,11 +424,6 @@ void sigintHandlerMadres(int sig) {
 		int i;
 		sigfillset(&mascara);
 		sigprocmask(SIG_SETMASK,&mascara,NULL);
-		for (i = 0; i < MAX_PROCESOS; i++) {
-				if (arrayPID[i] > 0) {
-						kill(arrayPID[i],SIGINT);
-				}
-		}
 		if (operarSobreSemaforo(semaforo,SEMAFORO_PROCESOS,SIGNAL,1,0) < 0) {
 				perror("sigintHandlerMadres: operacion");
 				_exit(20);
