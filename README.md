@@ -13,7 +13,8 @@ Batracios
     Según se va ejecutando el programa, se ha de ver una imagen parecida a la siguiente:  
       
     
-    ![visualización de la pantalla](http://avellano.usal.es/~ssooii/RANAS/ranas_unix.png)
+    ![image](https://github.com/Josde/SSOOII-Batracios/assets/3825181/8b30f059-5555-49e9-82e1-3cd494f71c61)
+
     
       
       
